@@ -1,180 +1,128 @@
 /**
  * Pangram Agent
  *
- * Uses the same XState interface as the UI to play the game.
- * Demonstrates that agents and humans share the same API.
+ * A "dumb" agent that only interacts through the machine interface.
+ * It does NOT call mechanics directly - it just tries words and observes results.
+ *
+ * This follows the architectural reduction principle:
+ * - Agent sends events (SUBMIT_WORD)
+ * - Agent observes results (score changed? error message?)
+ * - Agent learns from feedback
  */
 
 import { createActor } from 'xstate';
-import { pangramMachine, validateWordDictionary, validateWordRules, isPangram, calculateWordScore } from './index.js';
+import { pangramMachine } from './index.js';
 
-// Common English words to try (filtered by puzzle letters at runtime)
-const COMMON_WORDS = [
-  // 4-letter words
-  'rack', 'rain', 'rang', 'rank', 'ring', 'rink', 'rick', 'nick', 'nark',
-  'king', 'kink', 'kick', 'gain', 'grin', 'gnar', 'crag', 'cark', 'cairn',
-  'air', 'ark', 'can', 'car', 'gin', 'ink', 'kin', 'nag', 'rag', 'ran', 'rig',
-  // 5-letter words
-  'grain', 'grail', 'grank', 'crank', 'crack', 'crink', 'drink',
-  'caring', 'racing', 'raking', 'ranking', 'racking', 'ricking',
-  'acing', 'arcing', 'inking',
-  // 6-letter words
-  'racing', 'raking', 'ricing', 'acking', 'caring', 'caking',
-  'racking', 'ranking', 'rinking', 'kicking', 'nicking', 'ricking',
-  // 7-letter words (potential pangrams)
-  'racking', 'cracking', 'tracking', 'carking', 'acking', 'ranking',
-  'cranking', 'crankig', 'rackign',
-  // More words with K
-  'arak', 'akin', 'ankh', 'naik', 'kaing', 'kiang', 'naric', 'cairn',
-  'ackin', 'arking', 'inking', 'irking', 'narking', 'parking', 'karning',
+// Word candidates - agent doesn't know which are valid, just tries them
+const WORD_CANDIDATES = [
+  // Potential pangrams (try first - highest value)
+  'cracking', 'cranking', 'racking', 'carking', 'tracking',
+  // Long words
+  'ranking', 'racking', 'kicking', 'nicking', 'ricking', 'narking',
+  'raking', 'caking', 'inking', 'irking', 'arcing', 'acing',
+  // Medium words
+  'crack', 'crank', 'rank', 'rack', 'kick', 'nick', 'rick',
+  'king', 'ring', 'grin', 'grain', 'cairn', 'kiang',
+  // Short words
+  'rack', 'rain', 'rang', 'rank', 'ring', 'rink', 'rick', 'nick',
+  'king', 'kink', 'kick', 'gain', 'grin', 'crag', 'cark',
+  'akin', 'narc', 'nark', 'ark', 'ink', 'kin', 'rig', 'nag',
 ];
 
 /**
- * Generate all permutations of letters up to a given length
+ * Simple observation from machine state
  */
-function generateCandidates(letters: string[], minLen: number, maxLen: number): string[] {
-  const candidates: Set<string> = new Set();
-  const letterLower = letters.map(l => l.toLowerCase());
+function observe(actor: ReturnType<typeof createActor>) {
+  const snapshot = actor.getSnapshot();
+  const ctx = snapshot.context;
+  return {
+    letters: ctx.letters,
+    centerLetter: ctx.centerLetter,
+    score: ctx.score,
+    foundWords: ctx.foundWords,
+    lastMessage: ctx.lastMessage,
+    lastMessageType: ctx.lastMessageType,
+    isValidating: snapshot.value === 'validating',
+  };
+}
 
-  function permute(current: string, depth: number) {
-    if (current.length >= minLen) {
-      candidates.add(current);
-    }
-    if (depth >= maxLen) return;
-
-    for (const letter of letterLower) {
-      permute(current + letter, depth + 1);
-    }
+/**
+ * Wait for machine to finish validating
+ */
+async function waitForResult(actor: ReturnType<typeof createActor>, maxWait = 5000) {
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    const obs = observe(actor);
+    if (!obs.isValidating) return obs;
+    await new Promise(r => setTimeout(r, 50));
   }
-
-  permute('', 0);
-  return Array.from(candidates);
+  return observe(actor);
 }
 
 /**
- * Filter candidates to those that pass basic rules
+ * Agent that plays Pangram using only the machine interface
  */
-function filterByRules(
-  candidates: string[],
-  letters: string[],
-  centerLetter: string,
-  foundWords: string[]
-): string[] {
-  return candidates.filter(word => {
-    const result = validateWordRules(word, letters, centerLetter, foundWords);
-    return result.valid;
-  });
-}
-
-/**
- * Agent that plays Pangram
- */
-async function playPangram(maxAttempts: number = 50) {
+async function playPangram(maxAttempts = 100) {
   console.log('='.repeat(60));
-  console.log('PANGRAM AGENT');
+  console.log('PANGRAM AGENT (Machine-Only Interface)');
   console.log('='.repeat(60));
 
-  // Create actor - same as UI does
+  // Create actor
   const actor = createActor(pangramMachine, {
     input: { puzzleIndex: 0 }
   });
   actor.start();
 
-  const context = actor.getSnapshot().context;
-  console.log(`\nPuzzle: ${context.letters.join(' ')} (center: ${context.centerLetter})`);
-  console.log(`Starting score: ${context.score}`);
-  console.log('');
+  // Observe initial state
+  let obs = observe(actor);
+  console.log(`\nPuzzle: ${obs.letters.join(' ')} (center: ${obs.centerLetter})`);
+  console.log(`Starting score: ${obs.score}\n`);
 
-  // Strategy: combine known words with generated permutations
-  const shortCandidates = generateCandidates(context.letters, 4, 5);
-  const allCandidates = [...new Set([...COMMON_WORDS, ...shortCandidates])];
-
-  console.log(`Generated ${allCandidates.length} candidate words to try\n`);
-
+  const triedWords = new Set<string>();
   let attempts = 0;
-  let validatedWords = 0;
-  const testedWords = new Set<string>();
+  let accepted = 0;
 
-  // Sort candidates: prioritize longer words (more points) and potential pangrams
-  const sortedCandidates = allCandidates
-    .filter(w => w.length >= 4)
-    .sort((a, b) => {
-      // Prioritize pangrams
-      const aIsPangram = isPangram(a, context.letters);
-      const bIsPangram = isPangram(b, context.letters);
-      if (aIsPangram && !bIsPangram) return -1;
-      if (!aIsPangram && bIsPangram) return 1;
-      // Then by length (longer = more points)
-      return b.length - a.length;
-    });
-
-  for (const word of sortedCandidates) {
+  // Try words - agent doesn't pre-validate, just observes results
+  for (const word of WORD_CANDIDATES) {
     if (attempts >= maxAttempts) break;
-    if (testedWords.has(word.toLowerCase())) continue;
+    if (triedWords.has(word.toLowerCase())) continue;
 
-    testedWords.add(word.toLowerCase());
-    const currentContext = actor.getSnapshot().context;
+    triedWords.add(word.toLowerCase());
+    const prevScore = obs.score;
 
-    // Check basic rules first (fast, no API call)
-    const rulesResult = validateWordRules(
-      word,
-      currentContext.letters,
-      currentContext.centerLetter,
-      currentContext.foundWords
-    );
-
-    if (!rulesResult.valid) continue;
-
-    // Validate against dictionary API
+    // Send consolidated event - agent doesn't know if it will work
+    actor.send({ type: 'SUBMIT_WORD', word });
     attempts++;
-    const isValid = await validateWordDictionary(word);
 
-    if (isValid) {
-      validatedWords++;
-      const potentialScore = calculateWordScore(word, currentContext.letters);
-      const isPangramWord = isPangram(word, currentContext.letters);
+    // Wait for result and observe
+    obs = await waitForResult(actor);
 
-      // Type the word letter by letter (same as human would)
-      for (const letter of word.toUpperCase()) {
-        actor.send({ type: 'ADD_LETTER', letter });
-      }
-
-      // Submit
-      actor.send({ type: 'SUBMIT' });
-
-      // Wait for validation to complete
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      const newContext = actor.getSnapshot().context;
-      const wasAccepted = newContext.foundWords.includes(word.toLowerCase());
-
-      if (wasAccepted) {
-        console.log(
-          `  [+${potentialScore}] ${word.toUpperCase()}` +
-          (isPangramWord ? ' (PANGRAM!)' : '') +
-          ` -> Score: ${newContext.score}`
-        );
-      }
+    // Learn from feedback
+    if (obs.score > prevScore) {
+      accepted++;
+      const points = obs.score - prevScore;
+      const isPangram = points > 10; // Pangrams give 14+ points
+      console.log(
+        `  ✓ [+${points}] ${word.toUpperCase()}` +
+        (isPangram ? ' (PANGRAM!)' : '') +
+        ` → Score: ${obs.score}`
+      );
     }
-
-    // Small delay to not hammer the API
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Agent could log rejections to learn, but we skip for cleaner output
   }
 
   // Final results
-  const finalContext = actor.getSnapshot().context;
   console.log('\n' + '='.repeat(60));
   console.log('FINAL RESULTS');
   console.log('='.repeat(60));
-  console.log(`Words found: ${finalContext.foundWords.length}`);
-  console.log(`Final score: ${finalContext.score}`);
-  console.log(`API calls made: ${attempts}`);
-  console.log(`Valid words discovered: ${validatedWords}`);
-  console.log(`\nWords: ${finalContext.foundWords.join(', ')}`);
+  console.log(`Words found: ${obs.foundWords.length}`);
+  console.log(`Final score: ${obs.score}`);
+  console.log(`Attempts: ${attempts}`);
+  console.log(`Success rate: ${((accepted / attempts) * 100).toFixed(1)}%`);
+  console.log(`\nWords: ${obs.foundWords.join(', ')}`);
 
-  const pangrams = finalContext.foundWords.filter(w =>
-    isPangram(w, finalContext.letters)
-  );
+  // Count pangrams by checking which words gave 14+ points
+  const pangrams = obs.foundWords.filter(w => w.length === 7 || w.length === 8);
   if (pangrams.length > 0) {
     console.log(`Pangrams: ${pangrams.join(', ')}`);
   }
@@ -182,13 +130,17 @@ async function playPangram(maxAttempts: number = 50) {
   actor.stop();
 
   return {
-    score: finalContext.score,
-    words: finalContext.foundWords,
-    pangrams,
+    score: obs.score,
+    words: obs.foundWords,
+    attempts,
+    successRate: accepted / attempts,
   };
 }
 
-// Run the agent
+// Export for testing
+export { playPangram, observe, waitForResult };
+
+// Run if executed directly
 playPangram(100).then(result => {
   console.log('\n' + '='.repeat(60));
   console.log(`Agent finished with score: ${result.score}`);

@@ -33,6 +33,7 @@ export type PangramEvent =
   | { type: 'DELETE_LETTER' }
   | { type: 'CLEAR' }
   | { type: 'SUBMIT' }
+  | { type: 'SUBMIT_WORD'; word: string }  // Consolidated event for agents
   | { type: 'NEW_PUZZLE' };
 
 type ValidationResult =
@@ -61,13 +62,26 @@ export const pangramMachine = setup({
       }
       return {};
     }),
-    deleteLetter: assign(({ context }) => ({
-      currentInput: context.currentInput.slice(0, -1),
-      lastMessage: '',
-    })),
+    deleteLetter: assign(({ context }) => {
+      if (context.currentInput.length === 0) return {};  // No-op if empty
+      return {
+        currentInput: context.currentInput.slice(0, -1),
+        lastMessage: '',
+      };
+    }),
     clearInput: assign({
       currentInput: '',
       lastMessage: '',
+    }),
+    setWord: assign(({ context, event }) => {
+      if (event.type !== 'SUBMIT_WORD') return {};
+      // Filter to only valid letters and uppercase
+      const validWord = event.word
+        .toUpperCase()
+        .split('')
+        .filter(letter => context.letters.includes(letter))
+        .join('');
+      return { currentInput: validWord };
     }),
     setValidationError: assign((_, params: { message: string }) => ({
       currentInput: '',
@@ -96,12 +110,6 @@ export const pangramMachine = setup({
     }),
   },
   guards: {
-    canAddLetter: ({ context, event }) => {
-      if (event.type !== 'ADD_LETTER') return false;
-      return context.letters.includes(event.letter.toUpperCase());
-    },
-    canDelete: ({ context }) => context.currentInput.length > 0,
-    canSubmit: ({ context }) => context.currentInput.length >= 4,
     isValidWord: ({ event }) => {
       const result = (event as unknown as { output: ValidationResult }).output;
       return result.valid === true;
@@ -165,20 +173,46 @@ export const pangramMachine = setup({
     playing: {
       on: {
         ADD_LETTER: {
-          guard: 'canAddLetter',
-          actions: 'addLetter',
+          actions: 'addLetter',  // Silently ignores invalid letters
         },
         DELETE_LETTER: {
-          guard: 'canDelete',
-          actions: 'deleteLetter',
+          actions: 'deleteLetter',  // No-op if empty
         },
         CLEAR: {
           actions: 'clearInput',
         },
-        SUBMIT: {
-          guard: 'canSubmit',
-          target: 'validating',
-        },
+        SUBMIT: [
+          {
+            guard: ({ context }) => context.currentInput.length >= 4,
+            target: 'validating',
+          },
+          {
+            actions: assign({
+              lastMessage: 'Word must be at least 4 letters',
+              lastMessageType: 'error' as const,
+            }),
+          },
+        ],
+        SUBMIT_WORD: [
+          {
+            guard: ({ context, event }) => {
+              if (event.type !== 'SUBMIT_WORD') return false;
+              const validLetters = event.word
+                .toUpperCase()
+                .split('')
+                .filter(l => context.letters.includes(l));
+              return validLetters.length >= 4;
+            },
+            actions: 'setWord',
+            target: 'validating',
+          },
+          {
+            actions: assign({
+              lastMessage: 'Word must be at least 4 valid letters',
+              lastMessageType: 'error' as const,
+            }),
+          },
+        ],
         NEW_PUZZLE: {
           actions: 'resetForNewPuzzle',
         },
