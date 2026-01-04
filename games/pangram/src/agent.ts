@@ -122,7 +122,7 @@ async function playPangram(maxAttempts = 100) {
   console.log(`\nWords: ${obs.foundWords.join(', ')}`);
 
   // Count pangrams by checking which words gave 14+ points
-  const pangrams = obs.foundWords.filter(w => w.length === 7 || w.length === 8);
+  const pangrams = obs.foundWords.filter((w: string) => w.length === 7 || w.length === 8);
   if (pangrams.length > 0) {
     console.log(`Pangrams: ${pangrams.join(', ')}`);
   }
