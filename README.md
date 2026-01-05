@@ -55,21 +55,27 @@ The machine accepts any input and provides feedback instead of blocking:
 - Short words return error messages (not rejected)
 - Agents observe results via context changes
 
-## Running the Agent
+## Running Agents
 
+### Simple Agent (no LLM)
 ```bash
-pnpm build
 npx tsx games/pangram/src/agent.ts
 ```
 
-Output:
+### LLM Agent (with token tracking)
+```bash
+ANTHROPIC_API_KEY=sk-... npx tsx games/pangram/src/llm-agent.ts
 ```
-PANGRAM AGENT (Machine-Only Interface)
-Puzzle: R A C K I N G (center: K)
-  ✓ [+15] CRACKING (PANGRAM!) → Score: 15
-  ✓ [+15] CRANKING (PANGRAM!) → Score: 30
-  ...
-Final score: 143
+
+Output includes metrics:
+```json
+{
+  "score": 143,
+  "tokens": { "input": 4521, "output": 892, "total": 5413 },
+  "iterations": 22,
+  "toolCalls": 40,
+  "efficiency": 26.4
+}
 ```
 
 ## Commands
@@ -109,5 +115,6 @@ GitHub Actions: `typecheck` → `test` → `build` on every push.
 - [Writing Machines](guides/writing-machines.md) - XState v5 state machines
 - [Writing UI](guides/writing-ui.md) - React components
 - [Writing Agents](guides/writing-agents.md) - AI agents that play games
+- [Agent Benchmarking](guides/agent-benchmarking.md) - Token tracking and evaluation
 
 See [`CLAUDE.md`](CLAUDE.md) for AI assistant instructions.
