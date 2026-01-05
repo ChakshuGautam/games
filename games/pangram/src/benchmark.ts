@@ -15,9 +15,7 @@
  * - Analyze patterns and iterate
  */
 
-import { generateText, tool, LanguageModelV1, jsonSchema } from 'ai';
-import { google } from '@ai-sdk/google';
-import { anthropic } from '@ai-sdk/anthropic';
+import { ToolLoopAgent, tool, stepCountIs } from 'ai';
 import { z } from 'zod';
 import { createActor } from 'xstate';
 import { pangramMachine } from './machine.js';
@@ -57,25 +55,19 @@ export interface BenchmarkResult {
 
 const DEFAULT_CONFIG: BenchmarkConfig = {
   provider: 'google',
-  model: 'gemini-2.0-flash',
+  model: 'gemini-2.5-flash',
   maxSteps: 30,
   puzzleIndex: 0,
   enableCodeExecution: true,
 };
 
 // ============================================================================
-// Model Factory
+// Model String Factory
 // ============================================================================
 
-function getModel(config: BenchmarkConfig): LanguageModelV1 {
-  switch (config.provider) {
-    case 'google':
-      return google(config.model);
-    case 'anthropic':
-      return anthropic(config.model);
-    default:
-      throw new Error(`Unknown provider: ${config.provider}`);
-  }
+function getModelString(config: BenchmarkConfig): string {
+  // AI SDK 6 uses provider/model format
+  return `${config.provider}/${config.model}`;
 }
 
 // ============================================================================
@@ -147,39 +139,27 @@ export async function runBenchmark(
     };
   };
 
-  // Define tools using jsonSchema for Google compatibility
+  // Define tools using inputSchema (AI SDK 6 syntax)
   const tools = {
     get_game_state: tool({
       description: 'Get the current game state including available letters, center letter, score, and found words. Call this first to see what letters you have.',
-      parameters: jsonSchema<{ format: string }>({
-        type: 'object',
-        properties: {
-          format: { type: 'string', description: 'Output format: use "brief" or "detailed"' },
-        },
-        required: ['format'],
+      inputSchema: z.object({
+        format: z.string().describe('Output format: use "brief" or "detailed"'),
       }),
       execute: async () => observeGame(),
     }),
     submit_word: tool({
       description: 'Submit a word to score points. Must be 4+ letters, use only available letters, include center letter.',
-      parameters: jsonSchema<{ word: string }>({
-        type: 'object',
-        properties: {
-          word: { type: 'string', description: 'The word to submit' },
-        },
-        required: ['word'],
+      inputSchema: z.object({
+        word: z.string().describe('The word to submit'),
       }),
       execute: async ({ word }) => submitWord(word),
     }),
     ...(finalConfig.enableCodeExecution ? {
       execute_code: tool({
         description: 'Execute Python code to help solve the puzzle. Use this to generate word candidates, analyze patterns, etc. Use print() to see output.',
-        parameters: jsonSchema<{ code: string }>({
-          type: 'object',
-          properties: {
-            code: { type: 'string', description: 'Python code to execute' },
-          },
-          required: ['code'],
+        inputSchema: z.object({
+          code: z.string().describe('Python code to execute'),
         }),
         execute: async ({ code }) => executeCode(code),
       }),
@@ -201,43 +181,49 @@ export async function runBenchmark(
   console.log(`\nLetters: ${initial.letters.join(' ')} (center: ${initial.centerLetter})`);
   console.log('');
 
-  // Run the agent
-  const result = await generateText({
-    model: getModel(finalConfig),
-    system: systemPrompt,
-    prompt: `Play the game and maximize your score. Start by observing the game state, then submit words. You can write Python code to help generate word candidates if needed.`,
+  // Create the agent using ToolLoopAgent (AI SDK 6)
+  const agent = new ToolLoopAgent({
+    model: getModelString(finalConfig),
+    instructions: systemPrompt,
     tools,
-    maxSteps: finalConfig.maxSteps,
-    onStepFinish: ({ toolCalls, toolResults }) => {
-      if (toolCalls) {
-        for (const tc of toolCalls) {
-          if (tc.toolName === 'submit_word') {
-            const res = toolResults?.find((r) => r.toolCallId === tc.toolCallId);
-            if (res && typeof res.result === 'object' && res.result !== null) {
-              const r = res.result as { accepted: boolean; pointsEarned: number };
-              const word = (tc.args as { word: string }).word;
-              if (r.accepted) {
-                console.log(`  ✓ [+${r.pointsEarned}] ${word.toUpperCase()}`);
-              } else {
-                console.log(`  ✗ ${word}`);
-              }
+    stopWhen: stepCountIs(finalConfig.maxSteps),
+  });
+
+  // Run the agent
+  const result = await agent.generate({
+    prompt: `Play the game and maximize your score. First call get_game_state() to see the letters, then call submit_word() repeatedly with different words. Keep submitting words until you've tried many options.`,
+  });
+
+  // Log tool calls from steps
+  for (const step of result.steps) {
+    if (step.toolCalls) {
+      for (const tc of step.toolCalls) {
+        if (tc.toolName === 'submit_word') {
+          const res = step.toolResults?.find((r: { toolCallId: string }) => r.toolCallId === tc.toolCallId);
+          if (res && typeof res.output === 'object' && res.output !== null) {
+            const r = res.output as { accepted: boolean; pointsEarned: number };
+            const word = (tc.input as { word: string }).word;
+            if (r.accepted) {
+              console.log(`  ✓ [+${r.pointsEarned}] ${word.toUpperCase()}`);
+            } else {
+              console.log(`  ✗ ${word}`);
             }
-          } else if (tc.toolName === 'execute_code') {
-            console.log(`  🐍 Code executed`);
           }
+        } else if (tc.toolName === 'execute_code') {
+          console.log(`  🐍 Code executed`);
         }
       }
-    },
-  });
+    }
+  }
 
   // Get final state
   const finalState = actor.getSnapshot();
   actor.stop();
 
-  // Calculate metrics
-  const inputTokens = result.usage.promptTokens;
-  const outputTokens = result.usage.completionTokens;
-  const totalTokens = inputTokens + outputTokens;
+  // Calculate metrics - handle different provider formats
+  const inputTokens = result.usage?.promptTokens ?? 0;
+  const outputTokens = result.usage?.completionTokens ?? 0;
+  const totalTokens = result.usage?.totalTokens ?? (inputTokens + outputTokens);
   const score = finalState.context.score;
   const duration = Date.now() - startTime;
 

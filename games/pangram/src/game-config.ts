@@ -146,10 +146,19 @@ ${config.scoring}
 ${toolDocs}
 
 ## Strategy Tips
-- Start by calling observe() to see the available letters
+- Start by calling get_game_state() to see the available letters
 - Try pangrams first (use all 7 letters) - they score the most
 - You can write and execute code to help generate word candidates
 - Track which words were accepted vs rejected to learn patterns
 - Be efficient with tokens - maximize score per token spent
+
+## IMPORTANT: Tool Usage
+You MUST use the tools provided to play the game. After each tool call, continue making more tool calls until you have submitted many words. Do not stop after just observing - you must submit words using submit_word(). Keep submitting words until you run out of ideas or reach a high score.
+
+Workflow:
+1. Call get_game_state() to see letters
+2. Call submit_word() for each word you want to try
+3. Repeat step 2 many times with different words
+4. Keep going until you've tried all words you can think of
 `;
 }

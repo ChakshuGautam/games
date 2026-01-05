@@ -24,7 +24,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
     "@ai-sdk/google": "^3.0.2",
-    "ai": "^6.0.6",
+    "ai": "^6.0.7",
     "ai-sdk-tool-code-execution": "^0.0.2",
     "xstate": "^5.25.0",
     "zod": "^3.25.76"

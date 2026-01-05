@@ -15,16 +15,16 @@ Benchmark LLM agents on Game Bench games, tracking **tokens vs points**.
 ## Running the Benchmark
 
 ```bash
-# With Anthropic (recommended)
+# With Google Gemini (recommended)
+GOOGLE_GENERATIVE_AI_API_KEY=... npx tsx games/pangram/src/benchmark.ts \
+  --provider google \
+  --model gemini-2.5-flash \
+  --steps 30
+
+# With Anthropic
 ANTHROPIC_API_KEY=sk-... npx tsx games/pangram/src/benchmark.ts \
   --provider anthropic \
   --model claude-sonnet-4-20250514 \
-  --steps 30
-
-# With Google Gemini (requires AI SDK fix for tool schemas)
-GOOGLE_GENERATIVE_AI_API_KEY=... npx tsx games/pangram/src/benchmark.ts \
-  --provider google \
-  --model gemini-2.0-flash \
   --steps 30
 
 # Disable code execution
@@ -69,21 +69,22 @@ Submit a word to score points. Returns whether accepted and points earned.
 
 ## Implementation
 
-See [`games/pangram/src/llm-agent.ts`](../games/pangram/src/llm-agent.ts) for the full implementation using [Vercel AI SDK](https://sdk.vercel.ai/).
+See [`games/pangram/src/benchmark.ts`](../games/pangram/src/benchmark.ts) for the full implementation using [Vercel AI SDK 6](https://sdk.vercel.ai/).
 
 Key components:
-- `generateText` with `maxSteps` for agent loop
-- `tool()` to define game interactions
+- `ToolLoopAgent` for multi-step tool execution loop
+- `tool()` with `inputSchema` for game interactions
+- `stepCountIs()` to control max iterations
 - `result.usage` for token tracking
 - `result.steps` for iteration counting
 
 ## Leaderboard
 
-| Model | Score | Tokens | Efficiency | Cost |
-|-------|-------|--------|------------|------|
-| claude-sonnet-4 | 143 | 5,413 | 26.4 | $0.02 |
-| gpt-4o | 128 | 6,891 | 18.6 | $0.03 |
-| claude-haiku | 95 | 2,104 | 45.2 | $0.01 |
+| Model | Score | Tokens | Efficiency | Steps |
+|-------|-------|--------|------------|-------|
+| gemini-2.5-flash | 73 | 1,291 | 56.5 | 20 |
+
+*Run your own benchmark and submit results!*
 
 ## References
 

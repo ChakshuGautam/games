@@ -71,11 +71,11 @@ importers:
         specifier: ^3.0.2
         version: 3.0.2(zod@3.25.76)
       ai:
-        specifier: ^6.0.6
-        version: 6.0.6(zod@3.25.76)
+        specifier: ^6.0.7
+        version: 6.0.7(zod@3.25.76)
       ai-sdk-tool-code-execution:
         specifier: ^0.0.2
-        version: 0.0.2(ai@6.0.6(zod@3.25.76))(zod@3.25.76)
+        version: 0.0.2(ai@6.0.7(zod@3.25.76))(zod@3.25.76)
       xstate:
         specifier: ^5.25.0
         version: 5.25.0
@@ -151,8 +151,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@3.0.5':
-    resolution: {integrity: sha512-AtxA1wcoKTHr9uFoC5KZEXqJP4SMW4j3VbcliUECUYssbWbePJ9+b3AaCny1lxf1xhDK9EIyAgBOKhXoQSr9nA==}
+  '@ai-sdk/gateway@3.0.6':
+    resolution: {integrity: sha512-oEpwjM0PIaSUErtZI8Ag+gQ+ZelysRWA96N5ahvOc5e9d7QkKJWF0POWx0nI1qBxvmUSw7ca0sLTVw+J5yn7Tg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -901,8 +901,8 @@ packages:
       ai: ^5.0.0
       zod: ^4.0.0
 
-  ai@6.0.6:
-    resolution: {integrity: sha512-LM0eAMWVn3RTj+0X5O1m/8g+7QiTeWG5aN5FsDbdmCkAQHVg93XxLbljFOLzi0NMjuJgf7fKLKmWoPsrdMyqfw==}
+  ai@6.0.7:
+    resolution: {integrity: sha512-kLzSXHdW6cAcb2mFSIfkbfzxYqqjrUnyhrB1sg855qlC+6XkLI8hmwFE8f/4SnjmtcTDOnkIaVjWoO5i5Ir0bw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1536,7 +1536,7 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.2(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/gateway@3.0.5(zod@3.25.76)':
+  '@ai-sdk/gateway@3.0.6(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.1
       '@ai-sdk/provider-utils': 4.0.2(zod@3.25.76)
@@ -2127,9 +2127,9 @@ snapshots:
 
   acorn@8.15.0: {}
 
-  ai-sdk-tool-code-execution@0.0.2(ai@6.0.6(zod@3.25.76))(zod@3.25.76):
+  ai-sdk-tool-code-execution@0.0.2(ai@6.0.7(zod@3.25.76))(zod@3.25.76):
     dependencies:
-      ai: 6.0.6(zod@3.25.76)
+      ai: 6.0.7(zod@3.25.76)
       sandbox: 1.0.10
       zod: 3.25.76
     transitivePeerDependencies:
@@ -2137,9 +2137,9 @@ snapshots:
       - react-native-b4a
       - supports-color
 
-  ai@6.0.6(zod@3.25.76):
+  ai@6.0.7(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 3.0.5(zod@3.25.76)
+      '@ai-sdk/gateway': 3.0.6(zod@3.25.76)
       '@ai-sdk/provider': 3.0.1
       '@ai-sdk/provider-utils': 4.0.2(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
