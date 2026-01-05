@@ -129,7 +129,16 @@ Games should provide these standard tool types:
 
 ## Implementation
 
-Use [Vercel AI SDK 6](https://sdk.vercel.ai/) for the agent loop:
+Use [Vercel AI SDK 6](https://sdk.vercel.ai/) for the agent loop.
+
+### Key Resources
+
+- [AI SDK 6 Announcement](https://vercel.com/blog/ai-sdk-6) - Overview of ToolLoopAgent and new features
+- [Building AI Agents](https://sdk.vercel.ai/docs/ai-sdk-core/agents) - Official guide to building agents
+- [Tool Calling](https://sdk.vercel.ai/docs/ai-sdk-core/tools-and-tool-calling) - How to define tools with Zod schemas
+- [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) - Safe code execution in agents
+
+### Example Agent
 
 ```typescript
 import { ToolLoopAgent, tool, stepCountIs } from 'ai';
