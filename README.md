@@ -2,6 +2,12 @@
 
 A framework for building agent-playable games with XState state machines.
 
+## Live Games
+
+| Game | Link |
+|------|------|
+| Pangram | [pangram.fun.theflywheel.in](https://pangram.fun.theflywheel.in) |
+
 ## Architecture
 
 ```
