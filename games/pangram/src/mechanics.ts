@@ -3,10 +3,6 @@
  * Pure functions for game logic - no state, no side effects
  */
 
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
 // ============================================================================
 // Puzzle Data
 // ============================================================================
@@ -145,29 +141,66 @@ export function getWordStats(foundWords: string[], letters: string[]): {
 // Dictionary Validation
 // ============================================================================
 
-// Load dictionary once at module initialization
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const dictionaryPath = join(__dirname, 'dictionary.txt');
+// Dictionary is loaded lazily on first use (Node.js only)
+let DICTIONARY: Set<string> | null = null;
+let dictionaryLoaded = false;
 
-let DICTIONARY: Set<string>;
-try {
-  const words = readFileSync(dictionaryPath, 'utf-8')
-    .split('\n')
-    .map(w => w.trim().toLowerCase())
-    .filter(w => w.length > 0);
-  DICTIONARY = new Set(words);
-  console.log(`Dictionary loaded: ${DICTIONARY.size} words`);
-} catch {
-  console.warn('Dictionary not found, using empty set');
-  DICTIONARY = new Set();
+/**
+ * Load dictionary from file (Node.js only)
+ */
+async function loadDictionary(): Promise<Set<string>> {
+  if (DICTIONARY !== null) return DICTIONARY;
+
+  // Check if we're in Node.js environment
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    try {
+      const { readFileSync } = await import('fs');
+      const { fileURLToPath } = await import('url');
+      const { dirname, join } = await import('path');
+
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      const dictionaryPath = join(__dirname, 'dictionary.txt');
+
+      const words = readFileSync(dictionaryPath, 'utf-8')
+        .split('\n')
+        .map(w => w.trim().toLowerCase())
+        .filter(w => w.length > 0);
+      DICTIONARY = new Set(words);
+      console.log(`Dictionary loaded: ${DICTIONARY.size} words`);
+    } catch {
+      console.warn('Dictionary not found, using API fallback');
+      DICTIONARY = new Set();
+    }
+  } else {
+    // Browser environment - use empty set (will fall back to API)
+    DICTIONARY = new Set();
+  }
+
+  dictionaryLoaded = true;
+  return DICTIONARY;
 }
 
 /**
- * Validate word against local Scrabble dictionary
+ * Validate word against local Scrabble dictionary (Node.js) or Free Dictionary API (browser)
  */
 export async function validateWordDictionary(word: string): Promise<boolean> {
-  return DICTIONARY.has(word.toLowerCase());
+  const dict = await loadDictionary();
+
+  // If dictionary is loaded and non-empty, use it
+  if (dict.size > 0) {
+    return dict.has(word.toLowerCase());
+  }
+
+  // Fallback to Free Dictionary API for browser
+  try {
+    const response = await fetch(
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 // ============================================================================
