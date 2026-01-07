@@ -204,6 +204,73 @@ export async function validateWordDictionary(word: string): Promise<boolean> {
 }
 
 // ============================================================================
+// Puzzle Scoring Analysis
+// ============================================================================
+
+/**
+ * Find all valid words for a puzzle from the dictionary
+ */
+export async function findAllValidWords(
+  letters: string[],
+  centerLetter: string
+): Promise<string[]> {
+  const dict = await loadDictionary();
+  if (dict.size === 0) return [];
+
+  const letterSet = new Set(letters.map(l => l.toLowerCase()));
+  const center = centerLetter.toLowerCase();
+  const validWords: string[] = [];
+
+  for (const word of dict) {
+    // Must be 4+ letters
+    if (word.length < 4) continue;
+
+    // Must contain center letter
+    if (!word.includes(center)) continue;
+
+    // Must use only available letters
+    let valid = true;
+    for (const char of word) {
+      if (!letterSet.has(char)) {
+        valid = false;
+        break;
+      }
+    }
+
+    if (valid) {
+      validWords.push(word);
+    }
+  }
+
+  return validWords;
+}
+
+/**
+ * Calculate the maximum possible score for a puzzle
+ * Returns { maxScore, validWords, pangrams }
+ */
+export async function calculateMaxScore(
+  letters: string[],
+  centerLetter: string
+): Promise<{ maxScore: number; validWords: string[]; pangrams: string[] }> {
+  const validWords = await findAllValidWords(letters, centerLetter);
+
+  let maxScore = 0;
+  const pangrams: string[] = [];
+
+  for (const word of validWords) {
+    const points = calculateWordScore(word, letters);
+    maxScore += points;
+
+    if (isPangram(word, letters)) {
+      pangrams.push(word);
+    }
+  }
+
+  return { maxScore, validWords, pangrams };
+}
+
+// ============================================================================
 // Puzzle Generation
 // ============================================================================
 

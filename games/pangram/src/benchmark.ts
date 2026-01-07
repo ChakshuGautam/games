@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { createActor } from 'xstate';
 import { pangramMachine } from './machine.js';
 import { getGameConfig, generateSystemPrompt } from './game-config.js';
+import { isPangram, calculateMaxScore } from './mechanics.js';
 
 // ============================================================================
 // Types
@@ -43,14 +44,18 @@ export interface BenchmarkResult {
   config: BenchmarkConfig;
   game: {
     score: number;
+    maxScore: number;
+    correctness: number; // score / maxScore * 100
     wordsFound: string[];
+    totalValidWords: number;
     pangrams: string[];
+    totalPangrams: number;
   };
   metrics: {
     tokens: { input: number; output: number; total: number };
     iterations: number;
     toolCalls: { total: number; get_game_state: number; submit_word: number; execute_code: number };
-    efficiency: number;
+    efficiency: number; // correctness / (tokens / 1000)
     duration: number;
   };
 }
@@ -286,34 +291,48 @@ export async function runBenchmark(
 
   const totalToolCalls = toolCallCounts.get_game_state + toolCallCounts.submit_word + toolCallCounts.execute_code;
 
-  // Identify pangrams
-  const pangrams = finalState.context.foundWords.filter((w: string) => w.length >= 7);
+  // Identify pangrams (words using ALL 7 letters)
+  const letters = finalState.context.letters;
+  const centerLetter = finalState.context.centerLetter;
+  const foundPangrams = finalState.context.foundWords.filter((w: string) => isPangram(w, letters));
+
+  // Calculate max score for correctness metric
+  const maxScoreData = await calculateMaxScore(letters, centerLetter);
+  const maxScore = maxScoreData.maxScore;
+  const correctness = maxScore > 0 ? (score / maxScore) * 100 : 0;
+
+  // Efficiency based on correctness (not raw score)
+  const efficiency = totalTokens > 0 ? correctness / (totalTokens / 1000) : 0;
 
   // Print results
   console.log('\n' + '='.repeat(60));
   console.log('RESULTS');
   console.log('='.repeat(60));
-  console.log(`Score: ${score}`);
-  console.log(`Words: ${finalState.context.foundWords.length}`);
-  console.log(`Pangrams: ${pangrams.length}`);
+  console.log(`Score: ${score} / ${maxScore} (${correctness.toFixed(1)}% correctness)`);
+  console.log(`Words: ${finalState.context.foundWords.length} / ${maxScoreData.validWords.length}`);
+  console.log(`Pangrams: ${foundPangrams.length} / ${maxScoreData.pangrams.length}`);
   console.log(`\nTokens: ${totalTokens} (in: ${inputTokens}, out: ${outputTokens})`);
   console.log(`Iterations: ${result.steps.length}`);
   console.log(`Tool Calls: ${totalToolCalls} (get_state: ${toolCallCounts.get_game_state}, submit: ${toolCallCounts.submit_word}, code: ${toolCallCounts.execute_code})`);
-  console.log(`Efficiency: ${(score / (totalTokens / 1000)).toFixed(2)} points/1k tokens`);
+  console.log(`Efficiency: ${efficiency.toFixed(2)}% correctness/1k tokens`);
   console.log(`Duration: ${(duration / 1000).toFixed(1)}s`);
 
   const benchmarkResult: BenchmarkResult = {
     config: finalConfig,
     game: {
       score,
+      maxScore,
+      correctness,
       wordsFound: finalState.context.foundWords,
-      pangrams,
+      totalValidWords: maxScoreData.validWords.length,
+      pangrams: foundPangrams,
+      totalPangrams: maxScoreData.pangrams.length,
     },
     metrics: {
       tokens: { input: inputTokens, output: outputTokens, total: totalTokens },
       iterations: result.steps.length,
       toolCalls: { total: totalToolCalls, ...toolCallCounts },
-      efficiency: score / (totalTokens / 1000),
+      efficiency,
       duration,
     },
   };
